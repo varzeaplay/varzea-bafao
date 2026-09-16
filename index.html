@@ -135,9 +135,25 @@ img{max-width:100%;display:block}
 .fbtn:hover{border-color:var(--ink-3);color:var(--ink)}
 .fbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .fbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.fbtn[data-owner="gabriel"][aria-pressed="true"]{background:var(--gab);border-color:var(--gab);color:#fff}
-.fbtn[data-owner="lucas"][aria-pressed="true"]{background:var(--luc);border-color:var(--luc);color:#fff}
-.fbtn[data-owner="guilherme"][aria-pressed="true"]{background:var(--gui);border-color:var(--gui);color:#fff}
+.fbtn[data-filter="gabriel"][aria-pressed="true"]{background:var(--gab);border-color:var(--gab);color:#fff}
+.fbtn[data-filter="lucas"][aria-pressed="true"]{background:var(--luc);border-color:var(--luc);color:#fff}
+.fbtn[data-filter="guilherme"][aria-pressed="true"]{background:var(--gui);border-color:var(--gui);color:#fff}
+
+.fbar{
+  flex:1 0 100%;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:8px;padding:8px 11px;border-radius:8px;
+  background:var(--accent-soft);border:1px solid var(--line);
+  font-size:13px;line-height:1.4;color:var(--ink);
+}
+.fbar b{font-weight:700}
+.fbar a{color:var(--accent)}
+.fbar__btn{
+  margin-left:auto;font:600 12px/1 var(--body);
+  padding:6px 11px;border-radius:999px;cursor:pointer;
+  background:var(--ink);color:var(--bg);border:1px solid var(--ink);
+}
+.fbar__btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---------- estrutura ---------- */
 .wrap{max-width:1220px;margin:0 auto;padding-inline:16px}
@@ -274,6 +290,8 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-sp
   background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius);padding:18px;margin-bottom:18px;
 }
+/* itens de grid nao encolhem abaixo do conteudo sem isto — causa rolagem lateral no celular */
+.screen > *,.task > *,.layout > *,.loop > *{min-width:0}
 @media(min-width:720px){
   .screen{grid-template-columns:238px minmax(0,1fr);gap:22px;align-items:start}
   .screen--wide{grid-template-columns:1fr}
@@ -384,10 +402,14 @@ td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-sp
     <div class="topbar__mark">Varzea <span>Bafão</span></div>
     <div class="filters">
       <span class="filters__label">Ver tarefas de</span>
-      <button class="fbtn" type="button" data-owner="todos" aria-pressed="true">Todos</button>
-      <button class="fbtn" type="button" data-owner="gabriel" aria-pressed="false">Gabriel</button>
-      <button class="fbtn" type="button" data-owner="lucas" aria-pressed="false">Lucas</button>
-      <button class="fbtn" type="button" data-owner="guilherme" aria-pressed="false">Guilherme</button>
+      <button class="fbtn" type="button" data-filter="todos" aria-pressed="true">Todos</button>
+      <button class="fbtn" type="button" data-filter="gabriel" aria-pressed="false">Gabriel</button>
+      <button class="fbtn" type="button" data-filter="lucas" aria-pressed="false">Lucas</button>
+      <button class="fbtn" type="button" data-filter="guilherme" aria-pressed="false">Guilherme</button>
+    </div>
+    <div class="fbar" id="fbar" hidden>
+      <span>Mostrando só as tarefas de <b id="fbar-nome"></b>, na seção <a href="#cronograma">11 · Cronograma</a>.</span>
+      <button class="fbar__btn" type="button" id="fbar-limpar">Mostrar tudo</button>
     </div>
   </div>
 </header>
@@ -1809,28 +1831,62 @@ Assets/<br>
 
 <script>
 (function(){
-  var btns = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
-  var tasks = Array.prototype.slice.call(document.querySelectorAll('[data-owner]'));
+  var lista = function(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); };
 
-  function apply(owner){
+  var btns   = lista('.fbtn');
+  var tasks  = lista('.task[data-owner]');
+  var weeks  = lista('.wk');
+  var phases = lista('.phase');
+
+  var fbar   = document.getElementById('fbar');
+  var fnome  = document.getElementById('fbar-nome');
+  var flimpa = document.getElementById('fbar-limpar');
+
+  var NOMES = {gabriel:'Gabriel', lucas:'Lucas', guilherme:'Guilherme'};
+  var atual = 'todos';
+
+  function vazio(el){ return el.querySelectorAll('.task:not(.hide)').length === 0; }
+
+  function apply(owner, rolar){
+    atual = owner;
+
     btns.forEach(function(b){
-      b.setAttribute('aria-pressed', String(b.dataset.owner === owner));
+      b.setAttribute('aria-pressed', String(b.dataset.filter === owner));
     });
+
     tasks.forEach(function(t){
-      if(owner === 'todos'){
-        t.classList.remove('hide');
-      }else{
-        var owners = (t.dataset.owner || '').split(/\s+/);
-        t.classList.toggle('hide', owners.indexOf(owner) === -1);
-      }
+      var donos = (t.dataset.owner || '').split(/\s+/);
+      t.classList.toggle('hide', owner !== 'todos' && donos.indexOf(owner) === -1);
     });
+
+    weeks.forEach(function(w){ w.classList.toggle('hide', vazio(w)); });
+    phases.forEach(function(p){ p.classList.toggle('hide', vazio(p)); });
+
+    if(owner === 'todos'){
+      fbar.hidden = true;
+    }else{
+      fnome.textContent = NOMES[owner] || owner;
+      fbar.hidden = false;
+      if(rolar){
+        var alvo = document.getElementById('cronograma');
+        if(alvo){
+          var suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          alvo.scrollIntoView({behavior: suave ? 'smooth' : 'auto', block: 'start'});
+        }
+      }
+    }
   }
 
   btns.forEach(function(b){
-    b.addEventListener('click', function(){ apply(b.dataset.owner); });
+    b.addEventListener('click', function(){
+      var alvo = b.dataset.filter;
+      apply(alvo === atual && alvo !== 'todos' ? 'todos' : alvo, true);
+    });
   });
 
-  apply('todos');
+  flimpa.addEventListener('click', function(){ apply('todos', false); });
+
+  apply('todos', false);
 })();
 </script>
 </body>
